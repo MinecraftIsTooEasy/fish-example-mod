@@ -39,10 +39,9 @@ loom {
 
 }
 
-// Allow you to assign your username in game, but this feature fails on some device, reason unknown
-//runClient {
-//    args("--username", "${user_name}", "--session", "a.a.a.a", "--width", "${window_width}", "--height", "${window_height}")
-//}
+tasks.named('runClient', JavaExec).configure { exec ->
+    exec.setArgs(['--username', project.property('user_name'), '--session', '0', '--width', project.property('window_width'), '--height', project.property('window_height')])
+}
 
 dependencies {
     // To change the versions see the gradle.properties file
