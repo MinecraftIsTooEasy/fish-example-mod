@@ -15,6 +15,15 @@ base {
 //}
 
 repositories {
+    // Add repositories to retrieve artifacts from in here.
+    // You should only use this when depending on other mods because
+    // Loom adds the essential maven repositories to download Minecraft and libraries from automatically.
+    // See https://docs.gradle.org/current/userguide/declaring_repositories.html
+    // for more information about repositories.
+    maven {
+        name = "Spongepowered"
+        url = "https://repo.spongepowered.org/repository/maven-public/"
+    }//Dependency library(FastUtil, Gson, etc) download source
     maven {
         name = "ModdedMITE"
         url = ("https://maven.limingzxc.top/repository/maven-public/")
@@ -26,12 +35,17 @@ configurations {
 }
 
 dependencies {
+    // To change the versions see the gradle.properties file
     minecraft "com.mojang:minecraft:${project.minecraft_version}"
     modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
+
+    implementation("it.unimi.dsi:fastutil:8.5.12")
+    implementation("com.google.code.gson:gson:2.11.0")
 
     fml "com.github.MinecraftIsTooEasy:FishModLoader:3.4.2"
     implementation "com.github.MinecraftIsTooEasy:FishModLoader:3.4.2"
 
+    // Rusted_Iron_Core API. This is technically optional, but you probably want it anyway.
     implementation "com.github.MinecraftIsTooEasy:RustedIronCore:1.5.0"
 
 //    implementation "com.github.MinecraftIsTooEasy:ManyLib:2.3.0"
@@ -49,10 +63,13 @@ def fmlResolvedFile = configurations.fml.files.iterator().next()
 loom {
     accessWidenerPath = file("src/main/resources/modid.accessWidener")
     mergedMinecraftJar()
-
+    //latest fishmodloader https://github.com/MinecraftIsTooEasy/FishModLoader/releases/latest
     mods {
-        "modname" {
+        "modid" {
             sourceSet sourceSets.main
+//            sourceSet sourceSets.client
+//            sourceSet sourceSets.server
+//            For modules in the ’src‘ directory, only the main module is required by default
         }
     }
 }
@@ -73,6 +90,9 @@ tasks.withType(JavaCompile).configureEach {
 }
 
 java {
+    // Loom will automatically attach sourcesJar to a RemapSourcesJar task and to the "build" task
+    // if it is present.
+    // If you remove this line, sources will not be generated.
     withSourcesJar()
 
     sourceCompatibility = JavaVersion.VERSION_17
@@ -80,6 +100,11 @@ java {
 }
 
 jar {
+    inputs.property "archivesName", project.base.archivesName
+
+    from("LICENSE") {
+        rename { "${it}_${inputs.properties.archivesName}"}
+    }
 }
 
 tasks.named('runClient', JavaExec).configure { exec ->
@@ -91,10 +116,12 @@ tasks.named('runClient', JavaExec).configure { exec ->
 publishing {
     publications {
         mavenJava(MavenPublication) {
+            artifactId = project.archives_base_name
             from components.java
         }
     }
 
+    // See https://docs.gradle.org/current/userguide/publishing_maven.html for information on how to set up publishing.
     repositories {
         // Add repositories to publish to here.
         // Notice: This block does NOT have the same function as the block in the top level.
