@@ -1,5 +1,5 @@
 plugins {
-    id 'fml-loom' version "0.1.local"
+    id 'fml-loom' version '0.1'
     id 'maven-publish'
 }
 
@@ -10,50 +10,55 @@ base {
     archivesName = project.archives_base_name
 }
 
+//base {
+//    archivesName = "[中文名]" + project.archives_base_name
+//}
+
 repositories {
-    // Add repositories to retrieve artifacts from in here.
-    // You should only use this when depending on other mods because
-    // Loom adds the essential maven repositories to download Minecraft and libraries from automatically.
-    // See https://docs.gradle.org/current/userguide/declaring_repositories.html
-    // for more information about repositories.
-    mavenLocal() // for local files
     maven {
-        name = "Spongepowered"
-        url = "https://repo.spongepowered.org/repository/maven-public/"
-    }//Dependency library(FastUtil, Gson, etc) download source
-}
-
-loom {
-    accessWidenerPath = file("src/main/resources/modid.accesswidener")
-    mergedMinecraftJar()
-    //latest fishmodloader https://github.com/MinecraftIsTooEasy/FishModLoader/releases/latest
-    setFML(new File("libs\\FishModLoader-v${loader_version}.jar"))
-    mods {
-        "modid" {
-            sourceSet sourceSets.main
-//            sourceSet sourceSets.client
-//            sourceSet sourceSets.server
-            //For modules in the ’src‘ directory, only the main module is required by default
-        }
+        name = "ModdedMITE"
+        url = ("https://maven.limingzxc.top/repository/maven-public/")
     }
-
 }
 
-tasks.named('runClient', JavaExec).configure { exec ->
-    exec.setArgs(['--username', project.property('user_name'), '--session', '0', '--width', project.property('window_width'), '--height', project.property('window_height')])
+configurations {
+    fml
 }
 
 dependencies {
-    // To change the versions see the gradle.properties file
     minecraft "com.mojang:minecraft:${project.minecraft_version}"
-    mappings loom.fmlMCPMappings()
-    implementation files(loom.getFML().toPath())
-    implementation("it.unimi.dsi:fastutil:8.5.12")
-    implementation("com.google.code.gson:gson:2.11.0")
+    modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
 
-    // Rusted_Iron_Core API. This is technically optional, but you probably want it anyway.
-    implementation files("libs\\RustedIronCore-${rusted_iron_core_version}.jar")
+    fml "com.github.MinecraftIsTooEasy:FishModLoader:3.4.2"
+    implementation "com.github.MinecraftIsTooEasy:FishModLoader:3.4.2"
+
+    implementation "com.github.MinecraftIsTooEasy:RustedIronCore:1.5.0"
+
+//    implementation "com.github.MinecraftIsTooEasy:ManyLib:2.3.0"
+//    implementation "com.github.MinecraftIsTooEasy:ModMenu:10.1.1"
+//
+//    implementation "com.github.MinecraftIsTooEasy:Gson:2.10.1"
+//    implementation "com.github.MinecraftIsTooEasy:FastUtil:8.5.12"
+//    implementation "com.github.MinecraftIsTooEasy:EMI:1.1.24"
+//
+//    compileOnly "com.github.MinecraftIsTooEasy:xxx.jar"
 }
+
+def fmlResolvedFile = configurations.fml.files.iterator().next()
+
+loom {
+    accessWidenerPath = file("src/main/resources/modid.accessWidener")
+    mergedMinecraftJar()
+
+    mods {
+        "modname" {
+            sourceSet sourceSets.main
+        }
+    }
+}
+
+loom.setFML(fmlResolvedFile)
+dependencies.add("mappings", loom.fmlMCPMappings())
 
 processResources {
     inputs.property "version", project.version
@@ -68,9 +73,6 @@ tasks.withType(JavaCompile).configureEach {
 }
 
 java {
-    // Loom will automatically attach sourcesJar to a RemapSourcesJar task and to the "build" task
-    // if it is present.
-    // If you remove this line, sources will not be generated.
     withSourcesJar()
 
     sourceCompatibility = JavaVersion.VERSION_17
@@ -78,23 +80,21 @@ java {
 }
 
 jar {
-    inputs.property "archivesName", project.base.archivesName
+}
 
-    from("LICENSE") {
-        rename { "${it}_${inputs.properties.archivesName}"}
-    }
+tasks.named('runClient', JavaExec).configure { exec ->
+    def user = project.hasProperty('username') ? project.username : 'Dev'
+    exec.setArgs(['--username', user, '--session', '0', '--width', '854', '--height', '480'])
 }
 
 // configure the maven publication
 publishing {
     publications {
         mavenJava(MavenPublication) {
-            artifactId = project.archives_base_name
             from components.java
         }
     }
 
-    // See https://docs.gradle.org/current/userguide/publishing_maven.html for information on how to set up publishing.
     repositories {
         // Add repositories to publish to here.
         // Notice: This block does NOT have the same function as the block in the top level.
