@@ -7,6 +7,8 @@ version = project.mod_version
 group = project.maven_group
 
 base {
+    // The name of the generated JAR file.
+    // "[xxxx]" + project.archives_base_name to add an alias
     archivesName = project.archives_base_name
 }
 
@@ -23,11 +25,11 @@ repositories {
     maven {
         name = "Spongepowered"
         url = "https://repo.spongepowered.org/repository/maven-public/"
-    }//Dependency library(FastUtil, Gson, etc) download source
+    }// Dependency library(FastUtil, Gson, etc) download source
     maven {
         name = "ModdedMITE"
-        url = ("https://maven.limingzxc.top/repository/maven-public/")
-    }
+        url = "https://maven.limingzxc.top/repository/maven-public/"
+    }// Mods & Loaders download source
 }
 
 configurations {
@@ -45,25 +47,15 @@ dependencies {
     fml "com.github.MinecraftIsTooEasy:FishModLoader:3.4.2"
     implementation "com.github.MinecraftIsTooEasy:FishModLoader:3.4.2"
 
-    // Rusted_Iron_Core API. This is technically optional, but you probably want it anyway.
+    // The most basic dependency library mod, with a status similar to Fabric API
     implementation "com.github.MinecraftIsTooEasy:RustedIronCore:1.5.0"
-
-//    implementation "com.github.MinecraftIsTooEasy:ManyLib:2.3.0"
-//    implementation "com.github.MinecraftIsTooEasy:ModMenu:10.1.1"
-//
-//    implementation "com.github.MinecraftIsTooEasy:Gson:2.10.1"
-//    implementation "com.github.MinecraftIsTooEasy:FastUtil:8.5.12"
-//    implementation "com.github.MinecraftIsTooEasy:EMI:1.1.24"
-//
-//    compileOnly "com.github.MinecraftIsTooEasy:xxx.jar"
 }
 
 def fmlResolvedFile = configurations.fml.files.iterator().next()
 
 loom {
-    accessWidenerPath = file("src/main/resources/modid.accessWidener")
+    accessWidenerPath = file("src/main/resources/modid.accesswidener")
     mergedMinecraftJar()
-    //latest fishmodloader https://github.com/MinecraftIsTooEasy/FishModLoader/releases/latest
     mods {
         "modid" {
             sourceSet sourceSets.main
@@ -109,7 +101,9 @@ jar {
 
 tasks.named('runClient', JavaExec).configure { exec ->
     def user = project.hasProperty('username') ? project.username : 'Dev'
-    exec.setArgs(['--username', user, '--session', '0', '--width', '854', '--height', '480'])
+    def width = project.hasProperty('screen_width') ? project.screen_width : '854'
+    def height = project.hasProperty('screen_height') ? project.screen_height : '480'
+    exec.setArgs(['--username', user, '--session', '0', '--width', width, '--height', height])
 }
 
 // configure the maven publication

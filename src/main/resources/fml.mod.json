@@ -17,6 +17,9 @@
   "entrypoints": {
     "main": [
       "com.example.ExampleMod"
+    ],
+    "registry": [
+      "com.example.register.ExampleRegistryInit"
     ]
   },
   "mixins": [

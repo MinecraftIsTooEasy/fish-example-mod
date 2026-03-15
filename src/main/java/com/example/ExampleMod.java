@@ -1,6 +1,6 @@
 package com.example;
 
-import com.example.event.FishEventListen;
+import com.example.event.ExampleEvent;
 import net.fabricmc.api.ModInitializer;
 
 import net.xiaoyu233.fml.ModResourceManager;
@@ -28,6 +28,6 @@ public class ExampleMod implements ModInitializer {
         ModResourceManager.addResourcePackDomain(MOD_ID);
 
         //Register an event listening object
-        MITEEvents.MITE_EVENT_BUS.register(new FishEventListen());
+        ExampleEvent.register();
     }
 }
