@@ -49,6 +49,10 @@ dependencies {
 
     // The most basic dependency library mod, with a status similar to Fabric API
     implementation "com.github.MinecraftIsTooEasy:RustedIronCore:1.5.0"
+
+    // To add strong dependencies, use "implementation" like above
+    // To compile mod integrations(e.g. ModMenu), use "compileOnly"
+    // To add mods for running client, use "localRuntime"
 }
 
 def fmlResolvedFile = configurations.fml.files.iterator().next()
