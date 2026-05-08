@@ -68,7 +68,7 @@ loom {
     }
     runs {
         client {
-            String name = project.name
+            String name = project.username
             String width = project.screen_width
             String height = project.screen_height
             programArgs "--userProperties", "{}", "--username", name, "--session", "a.a.a.a", "--width", width, "--height", height
