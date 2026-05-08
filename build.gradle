@@ -12,10 +12,6 @@ base {
     archivesName = project.archives_base_name
 }
 
-//base {
-//    archivesName = "[中文名]" + project.archives_base_name
-//}
-
 repositories {
     // Add repositories to retrieve artifacts from in here.
     // You should only use this when depending on other mods because
@@ -60,6 +56,8 @@ def fmlResolvedFile = configurations.fml.files.iterator().next()
 loom {
     accessWidenerPath = file("src/main/resources/modid.accesswidener")
     mergedMinecraftJar()
+    setFML(fmlResolvedFile)
+    dependencies.add("mappings", fmlMCPMappings())
     mods {
         "modid" {
             sourceSet sourceSets.main
@@ -68,10 +66,15 @@ loom {
 //            For modules in the ’src‘ directory, only the main module is required by default
         }
     }
+    runs {
+        client {
+            String name = project.name
+            String width = project.screen_width
+            String height = project.screen_height
+            programArgs "--userProperties", "{}", "--username", name, "--session", "a.a.a.a", "--width", width, "--height", height
+        }
+    }
 }
-
-loom.setFML(fmlResolvedFile)
-dependencies.add("mappings", loom.fmlMCPMappings())
 
 processResources {
     inputs.property "version", project.version
@@ -103,13 +106,6 @@ jar {
     }
 }
 
-tasks.named('runClient', JavaExec).configure { exec ->
-    def user = project.hasProperty('username') ? project.username : 'Dev'
-    def width = project.hasProperty('screen_width') ? project.screen_width : '854'
-    def height = project.hasProperty('screen_height') ? project.screen_height : '480'
-    exec.setArgs(['--username', user, '--session', '0', '--width', width, '--height', height])
-}
-
 // configure the maven publication
 publishing {
     publications {
@@ -125,5 +121,16 @@ publishing {
         // Notice: This block does NOT have the same function as the block in the top level.
         // The repositories here will be used for publishing your artifact, not for
         // retrieving dependencies.
+
+        // Default Maven Central.
+        maven {
+            name = "ModdedMITE"
+            url = uri("https://maven.limingzxc.top/repository/maven-releases/")
+            credentials {
+                // Read only from gradle.properties (user level, your gradle_home)
+                username = project.findProperty("nexusUsername")
+                password = project.findProperty("nexusPassword")
+            }
+        }
     }
 }
