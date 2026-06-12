@@ -28,12 +28,37 @@ jobs:
       - name: Add permission
         run: chmod +x ./gradlew
 
+      - name: Ensure jar in fml-loom cache
+        run: |
+          set -euo pipefail
+          MITE_VER="1.6.4-MITE"
+          GRADLE_USER_HOME="${GRADLE_USER_HOME:-$HOME/.gradle}"
+          CACHE_DIR="$GRADLE_USER_HOME/caches/fml-loom/$MITE_VER"
+          TARGET_JAR="$CACHE_DIR/$MITE_VER.jar"
+
+          mkdir -p "$CACHE_DIR"
+
+          if [ -f "$TARGET_JAR" ]; then
+            echo "Found $TARGET_JAR, skipping download."
+            exit 0
+          fi
+
+          DOWNLOAD_URL="https://maven.limingzxc.top/repository/maven-releases/com/mojang/minecraft/$MITE_VER/minecraft-$MITE_VER.jar"
+
+          echo "Downloading $DOWNLOAD_URL ..."
+          # download to temp file then move into place
+          curl -fSL "$DOWNLOAD_URL" -o "$TARGET_JAR.tmp"
+          mv "$TARGET_JAR.tmp" "$TARGET_JAR"
+          echo "Saved $TARGET_JAR"
+
       - name: Execute Gradle build
         run: ./gradlew build
 
       - name: Get Changes between Tags
         id: changes
         uses: simbo/changes-between-tags-action@v1
+        with:
+          validate-tag: 'false'
 
       - uses: Kir-Antipov/mc-publish@v3.3.0
         with:
@@ -50,7 +75,7 @@ jobs:
           files: |
             build/libs/!(*-@(dev|sources|javadoc)).jar
             build/libs/*-@(dev|sources|javadoc).jar
-          loaders: fabric
+          loaders: LegacyFabric
           game-versions: 1.6.4
           java: |
             17

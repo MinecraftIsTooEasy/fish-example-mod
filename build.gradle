@@ -73,6 +73,9 @@ loom {
             String height = project.screen_height
             programArgs "--userProperties", "{}", "--username", name, "--session", "a.a.a.a", "--width", width, "--height", height
         }
+//        server {
+//            programArgs "--", ""
+//        }
     }
 }
 
