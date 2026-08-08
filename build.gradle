@@ -6,18 +6,24 @@ plugins {
 version = project.mod_version
 group = project.maven_group
 
+// Replace "Country" with an ISO country code, for example: "CN".
+def useLocalizedArchiveName = Locale.default.country.equalsIgnoreCase("Country")
+
 base {
-    // The name of the generated JAR file.
-    // "[xxxx]" + project.archives_base_name to add an alias
-    archivesName = project.archives_base_name
+    // Replace "LocalizedArchiveName" with the localized alias.
+    // Prefix local JAR names with an optional alias, for example: "[Alias]" + archives_base_name.
+    // Maven publishing keeps using the lowercase maven_id configured below.
+    archivesName = useLocalizedArchiveName
+            ? "[LocalizedArchiveName]${project.archives_base_name}"
+            : project.archives_base_name
 }
 
 repositories {
     // Add repositories to retrieve artifacts from in here.
-    // You should only use this when depending on other mods because
-    // Loom adds the essential maven repositories to download Minecraft and libraries from automatically.
+    // Only declare repositories required by this project because Loom provides
+    // the repositories needed for Minecraft and its libraries automatically.
     // See https://docs.gradle.org/current/userguide/declaring_repositories.html
-    // for more information about repositories.
+    // for more information about repository declarations.
     maven {
         name = "Spongepowered"
         url = "https://repo.spongepowered.org/repository/maven-public/"
@@ -33,7 +39,9 @@ configurations {
 }
 
 dependencies {
-    // To change the versions see the gradle.properties file
+    // Dependency versions are maintained in gradle.properties or alongside project-specific declarations below.
+    // Use implementation for required mods, compileOnly for optional integrations,
+    // and localRuntime for mods needed only in the development environment.
     minecraft "com.mojang:minecraft:${project.minecraft_version}"
     modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
 
@@ -51,7 +59,7 @@ dependencies {
     // To add mods for running client, use "localRuntime"
 }
 
-def fmlResolvedFile = configurations.fml.files.iterator().next()
+def fmlResolvedFile = configurations.fml.singleFile
 
 loom {
     accessWidenerPath = file("src/main/resources/modid.accesswidener")
@@ -63,7 +71,7 @@ loom {
             sourceSet sourceSets.main
 //            sourceSet sourceSets.client
 //            sourceSet sourceSets.server
-//            For modules in the ’src‘ directory, only the main module is required by default
+//            For modules in the 'src' directory, only the main source set is required by default.
         }
     }
     runs {
@@ -80,25 +88,24 @@ loom {
 }
 
 processResources {
-    inputs.property "version", project.version
+    inputs.properties(
+            version: project.version,
+            id: project.mod_id,
+            name: project.mod_name
+    )
 
     filesMatching("fml.mod.json") {
-        expand([
-                version: project.version,
-                id     : project.property("mod_id"),
-                name   : project.property("mod_name")
-        ])
+        expand(inputs.properties)
     }
 }
 
 tasks.withType(JavaCompile).configureEach {
-    it.options.release = 17
+    options.release = 17
 }
 
 java {
-    // Loom will automatically attach sourcesJar to a RemapSourcesJar task and to the "build" task
-    // if it is present.
-    // If you remove this line, sources will not be generated.
+    // Loom automatically attaches sourcesJar to remapSourcesJar and the build lifecycle when it is present.
+    // Remove this line only when source artifacts should not be generated.
     withSourcesJar()
 
     sourceCompatibility = JavaVersion.VERSION_17
@@ -109,16 +116,16 @@ jar {
     inputs.property "archivesName", project.base.archivesName
 
     from("LICENSE") {
-        rename { "${it}_${inputs.properties.archivesName}" }
+        rename { String fileName -> "${fileName}_${inputs.properties.archivesName}" }
     }
 }
 
-// configure the maven publication
+// Configure the Maven publication.
 publishing {
     publications {
-        mavenJava(MavenPublication) {
-            artifactId = project.property("maven_id")
-            from components.java
+        create("mavenJava", MavenPublication) {
+            artifactId = project.maven_id
+            from(components.java)
         }
     }
 
@@ -129,7 +136,7 @@ publishing {
         // The repositories here will be used for publishing your artifact, not for
         // retrieving dependencies.
 
-        // Default Maven Central.
+        // ModdedMITE release repository.
         maven {
             name = "ModdedMITE"
             url = uri("https://maven.limingzxc.top/repository/maven-releases/")
