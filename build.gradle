@@ -59,6 +59,28 @@ dependencies {
     // To add mods for running client, use "localRuntime"
 }
 
+// Minecraft 1.6.4 pins LWJGL 2.9.1, whose macOS natives are x86_64 only and whose window
+// creation no longer works on current macOS: the process stays registered as BackgroundOnly,
+// so the render loop runs but no window is ever shown. Prism Launcher solves this for legacy
+// versions by moving to LWJGL 2.9.4 plus community-built arm64 natives, and the same
+// substitution is applied here. Set skip_arm64_lwjgl=true in gradle.properties to opt out.
+// This has to be declared before any configuration is resolved.
+def onAppleSilicon = System.getProperty("os.name").startsWith("Mac")
+        && System.getProperty("os.arch") == "aarch64"
+def useArm64Lwjgl = onAppleSilicon
+        && !Boolean.parseBoolean(String.valueOf(project.findProperty("skip_arm64_lwjgl")))
+
+if (useArm64Lwjgl) {
+    configurations.all {
+        resolutionStrategy.eachDependency {
+            if (it.requested.group == "org.lwjgl.lwjgl") {
+                it.useVersion "2.9.4-nightly-20150209"
+                it.because "LWJGL 2.9.1 ships no macOS arm64 natives"
+            }
+        }
+    }
+}
+
 def fmlResolvedFile = configurations.fml.singleFile
 
 loom {
@@ -80,6 +102,11 @@ loom {
             String width = project.screen_width
             String height = project.screen_height
             programArgs "--userProperties", "{}", "--username", name, "--session", "a.a.a.a", "--width", width, "--height", height
+
+            // Loom adds -XstartOnFirstThread on macOS for LWJGL 3, but this version runs on
+            // LWJGL 2, which drives its own Cocoa event loop. With the flag the process never
+            // leaves BackgroundOnly, so the render loop runs while no window is ever shown.
+            vmArgs.remove("-XstartOnFirstThread")
         }
 //        server {
 //            programArgs "--", ""
@@ -110,6 +137,162 @@ java {
 
     sourceCompatibility = JavaVersion.VERSION_17
     targetCompatibility = JavaVersion.VERSION_17
+}
+
+// The game must run on Java 17: the Mixin build bundled with FishModLoader uses an ASM
+// that cannot read class files newer than Java 17. It must also match the architecture of
+// the natives installed above, which Gradle's toolchain selection cannot express: it filters
+// on version and vendor only, so with both an x86_64 and an arm64 JDK 17 installed it may
+// hand out either one. Set game_java_home in ~/.gradle/gradle.properties to override.
+def gameJavaHome = useArm64Lwjgl ? findGameJavaHome("arm64") : null
+
+tasks.withType(JavaExec).configureEach {
+    if (gameJavaHome != null) {
+        executable = new File(gameJavaHome, "bin/java").absolutePath
+    } else {
+        // Loom finalizes the java extension's toolchain during configuration,
+        // so the launcher is pinned per task rather than in the java block.
+        javaLauncher = javaToolchains.launcherFor {
+            languageVersion = JavaLanguageVersion.of(17)
+        }
+    }
+
+    if (useArm64Lwjgl) {
+        dependsOn tasks.named("overlayArm64Natives")
+    }
+}
+
+/**
+ * Finds a Java 17 home for the given architecture, or null to fall back to the toolchain.
+ * An explicit game_java_home wins, and is trusted as given rather than probed.
+ */
+File findGameJavaHome(String architecture) {
+    def configured = project.findProperty("game_java_home")
+    if (configured) {
+        def home = new File(configured.toString())
+        if (!new File(home, "bin/java").isFile()) {
+            throw new GradleException("game_java_home does not point at a JDK: ${home}")
+        }
+        return home
+    }
+
+    def match = ["${System.getProperty("user.home")}/Library/Java/JavaVirtualMachines",
+                 "/Library/Java/JavaVirtualMachines"]
+            .collect { new File(it) }
+            .findAll { it.isDirectory() }
+            .collectMany { (it.listFiles() ?: []) as List }
+            .collect { new File(it, "Contents/Home") }
+            .find { home ->
+                def binary = new File(home, "bin/java")
+                if (!binary.isFile() || !javaArchitectures(binary).contains(architecture)) {
+                    return false
+                }
+                def release = new File(home, "release")
+                return release.isFile() && release.readLines().any {
+                    it.startsWith("JAVA_VERSION=") && it.contains('"17')
+                }
+            }
+
+    if (match == null) {
+        logger.warn("No ${architecture} JDK 17 found, falling back to the Java 17 toolchain. "
+                + "If that picks a JVM of another architecture, runClient fails with "
+                + "UnsatisfiedLinkError; point game_java_home at a ${architecture} JDK 17.")
+    }
+    return match
+}
+
+/** Returns the architectures the given Mach-O binary was built for. */
+List<String> javaArchitectures(File binary) {
+    def stdout = new ByteArrayOutputStream()
+    def result = exec {
+        commandLine "lipo", "-archs", binary.absolutePath
+        standardOutput = stdout
+        errorOutput = new ByteArrayOutputStream()
+        ignoreExitValue = true
+    }
+    return result.exitValue == 0 ? stdout.toString().trim().split(/\s+/) as List : []
+}
+
+// The arm64 natives are the MinecraftMachina rebuild of LWJGL 2.9.4, the same artifact
+// Prism Launcher pulls in for legacy versions on Apple Silicon.
+def arm64NativesSha1 = "eff546c0b319d6ffc7a835652124c18089c67f36"
+def arm64NativesUrl = "https://github.com/MinecraftMachina/lwjgl/releases/download/" +
+        "2.9.4-20150209-mmachina.2/lwjgl-platform-2.9.4-nightly-20150209-natives-osx.jar"
+
+tasks.register("overlayArm64Natives") {
+    description = "Overlays macOS arm64 LWJGL 2 natives over the ones Loom extracts."
+    dependsOn tasks.named("extractNatives")
+    onlyIf { useArm64Lwjgl }
+
+    def nativesDir = loom.files.getNativesDirectory(project)
+    def sourceJar = arm64NativesJar(arm64NativesSha1, arm64NativesUrl)
+
+    inputs.file(sourceJar)
+    outputs.dir(nativesDir)
+
+    doLast {
+        copy {
+            from zipTree(sourceJar)
+            into nativesDir
+            include "**/*.dylib"
+            eachFile { it.relativePath = new RelativePath(true, it.name) }
+            includeEmptyDirs = false
+            duplicatesStrategy = DuplicatesStrategy.INCLUDE
+        }
+    }
+}
+
+/**
+ * Locates the arm64 LWJGL 2 natives jar, verified against its checksum. Prefers an explicit
+ * arm64_lwjgl_natives path, then the Gradle cache, and downloads it only as a last resort
+ * because the release is hosted on GitHub, which is not reachable from every network.
+ */
+File arm64NativesJar(String sha1, String url) {
+    def configured = project.findProperty("arm64_lwjgl_natives")
+    if (configured) {
+        def jar = new File(configured.toString())
+        if (sha1Of(jar) != sha1) {
+            throw new GradleException("arm64_lwjgl_natives checksum mismatch: ${jar}")
+        }
+        return jar
+    }
+
+    def cached = new File("${System.getProperty("user.home")}/.gradle/caches/modules-2/files-2.1")
+    def fromCache = cached.isDirectory() ? fileTree(cached) {
+        include "org.lwjgl.lwjgl/**/*.jar"
+    }.find { sha1Of(it) == sha1 } : null
+    if (fromCache != null) {
+        return fromCache
+    }
+
+    def target = new File(project.layout.buildDirectory.get().asFile, "arm64-natives/lwjgl.jar")
+    if (target.isFile() && sha1Of(target) == sha1) {
+        return target
+    }
+
+    logger.lifecycle("Downloading macOS arm64 LWJGL 2 natives from ${url}")
+    target.parentFile.mkdirs()
+    def part = new File(target.parentFile, "lwjgl.jar.part")
+    new URL(url).withInputStream { input -> part.withOutputStream { it << input } }
+
+    def actual = sha1Of(part)
+    if (actual != sha1) {
+        part.delete()
+        throw new GradleException("Checksum mismatch for ${url}: expected ${sha1}, got ${actual}")
+    }
+    part.renameTo(target)
+    return target
+}
+
+/** Returns the SHA-1 of the given file as a lowercase hex string, or null when absent. */
+String sha1Of(File file) {
+    if (!file?.isFile()) {
+        return null
+    }
+    return java.security.MessageDigest.getInstance("SHA-1")
+            .digest(file.bytes)
+            .encodeHex()
+            .toString()
 }
 
 jar {
