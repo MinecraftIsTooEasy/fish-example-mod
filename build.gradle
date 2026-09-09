@@ -73,11 +73,43 @@ def useArm64Lwjgl = onAppleSilicon
 if (useArm64Lwjgl) {
     configurations.all {
         resolutionStrategy.eachDependency {
-            if (it.requested.group == "org.lwjgl.lwjgl") {
+            // The arm64 natives keep their own version: it is the release tag the repository
+            // below builds its URLs from, so rewriting it would break resolution.
+            if (it.requested.group == "org.lwjgl.lwjgl"
+                    && it.requested.name != "lwjgl-platform-arm64") {
                 it.useVersion "2.9.4-nightly-20150209"
                 it.because "LWJGL 2.9.1 ships no macOS arm64 natives"
             }
         }
+    }
+
+    // Mojang only ships x86_64 macOS natives for LWJGL 2, so the arm64 build comes from the
+    // MinecraftMachina release Prism Launcher also uses. It is published as a GitHub release
+    // asset rather than to a Maven repository, hence the pattern layout.
+    repositories {
+        ivy {
+            name = "MinecraftMachinaLWJGL"
+            url = "https://github.com/MinecraftMachina/lwjgl/releases/download/"
+            patternLayout {
+                artifact "[revision]/lwjgl-platform-2.9.4-nightly-20150209-natives-osx.[ext]"
+            }
+            metadataSources {
+                artifact()
+            }
+            content {
+                includeModule("org.lwjgl.lwjgl", "lwjgl-platform-arm64")
+            }
+        }
+    }
+
+    // Swap the natives Loom resolved from the version manifest for the arm64 build and let
+    // its own extractNatives task unpack them.
+    configurations.matching { it.name == "minecraftNatives" }.configureEach {
+        exclude group: "org.lwjgl.lwjgl", module: "lwjgl-platform"
+    }
+
+    dependencies {
+        minecraftNatives "org.lwjgl.lwjgl:lwjgl-platform-arm64:2.9.4-20150209-mmachina.2"
     }
 }
 
@@ -157,9 +189,6 @@ tasks.withType(JavaExec).configureEach {
         }
     }
 
-    if (useArm64Lwjgl) {
-        dependsOn tasks.named("overlayArm64Natives")
-    }
 }
 
 /**
@@ -211,88 +240,6 @@ List<String> javaArchitectures(File binary) {
         ignoreExitValue = true
     }
     return result.exitValue == 0 ? stdout.toString().trim().split(/\s+/) as List : []
-}
-
-// The arm64 natives are the MinecraftMachina rebuild of LWJGL 2.9.4, the same artifact
-// Prism Launcher pulls in for legacy versions on Apple Silicon.
-def arm64NativesSha1 = "eff546c0b319d6ffc7a835652124c18089c67f36"
-def arm64NativesUrl = "https://github.com/MinecraftMachina/lwjgl/releases/download/" +
-        "2.9.4-20150209-mmachina.2/lwjgl-platform-2.9.4-nightly-20150209-natives-osx.jar"
-
-tasks.register("overlayArm64Natives") {
-    description = "Overlays macOS arm64 LWJGL 2 natives over the ones Loom extracts."
-    dependsOn tasks.named("extractNatives")
-    onlyIf { useArm64Lwjgl }
-
-    def nativesDir = loom.files.getNativesDirectory(project)
-    def sourceJar = arm64NativesJar(arm64NativesSha1, arm64NativesUrl)
-
-    inputs.file(sourceJar)
-    outputs.dir(nativesDir)
-
-    doLast {
-        copy {
-            from zipTree(sourceJar)
-            into nativesDir
-            include "**/*.dylib"
-            eachFile { it.relativePath = new RelativePath(true, it.name) }
-            includeEmptyDirs = false
-            duplicatesStrategy = DuplicatesStrategy.INCLUDE
-        }
-    }
-}
-
-/**
- * Locates the arm64 LWJGL 2 natives jar, verified against its checksum. Prefers an explicit
- * arm64_lwjgl_natives path, then the Gradle cache, and downloads it only as a last resort
- * because the release is hosted on GitHub, which is not reachable from every network.
- */
-File arm64NativesJar(String sha1, String url) {
-    def configured = project.findProperty("arm64_lwjgl_natives")
-    if (configured) {
-        def jar = new File(configured.toString())
-        if (sha1Of(jar) != sha1) {
-            throw new GradleException("arm64_lwjgl_natives checksum mismatch: ${jar}")
-        }
-        return jar
-    }
-
-    def cached = new File("${System.getProperty("user.home")}/.gradle/caches/modules-2/files-2.1")
-    def fromCache = cached.isDirectory() ? fileTree(cached) {
-        include "org.lwjgl.lwjgl/**/*.jar"
-    }.find { sha1Of(it) == sha1 } : null
-    if (fromCache != null) {
-        return fromCache
-    }
-
-    def target = new File(project.layout.buildDirectory.get().asFile, "arm64-natives/lwjgl.jar")
-    if (target.isFile() && sha1Of(target) == sha1) {
-        return target
-    }
-
-    logger.lifecycle("Downloading macOS arm64 LWJGL 2 natives from ${url}")
-    target.parentFile.mkdirs()
-    def part = new File(target.parentFile, "lwjgl.jar.part")
-    new URL(url).withInputStream { input -> part.withOutputStream { it << input } }
-
-    def actual = sha1Of(part)
-    if (actual != sha1) {
-        part.delete()
-        throw new GradleException("Checksum mismatch for ${url}: expected ${sha1}, got ${actual}")
-    }
-    part.renameTo(target)
-    return target
-}
-
-/** Returns the SHA-1 of the given file as a lowercase hex string, or null when absent. */
-String sha1Of(File file) {
-    if (!file?.isFile()) {
-        return null
-    }
-    return java.security.MessageDigest.getInstance("SHA-1")
-            .digest(file.bytes)
-            .encodeHex()
-            .toString()
 }
 
 jar {
