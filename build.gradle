@@ -43,13 +43,12 @@ dependencies {
     // Use implementation for required mods, compileOnly for optional integrations,
     // and localRuntime for mods needed only in the development environment.
     minecraft "com.mojang:minecraft:${project.minecraft_version}"
-    modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
 
     implementation("it.unimi.dsi:fastutil:8.5.12")
     implementation("com.google.code.gson:gson:2.11.0")
 
-    fml "com.github.MinecraftIsTooEasy:FishModLoader:3.4.2"
-    implementation "com.github.MinecraftIsTooEasy:FishModLoader:3.4.2"
+    fml "com.github.MinecraftIsTooEasy:FishModLoader:${project.loader_version}"
+    implementation "com.github.MinecraftIsTooEasy:FishModLoader:${project.loader_version}"
 
     // The most basic dependency library mod, with a status similar to Fabric API
     implementation "com.github.MinecraftIsTooEasy:RustedIronCore:1.5.5"
